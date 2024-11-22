@@ -3,8 +3,6 @@ title: 'Shared Mouse Tracker'
 description: 'A real-time interactive application for tracking mouse movements across multiple users'
 ---
 
-import { Callout } from 'nextra/components'
-
 # Shared Mouse Tracker
 
 A real-time interactive application built using Next.js and Geobase that tracks mouse movements of multiple users and displays them on a shared canvas. The app features responsive design, real-time updates, and user-specific markers for enhanced clarity.
