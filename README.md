@@ -1,36 +1,160 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+---
+title: 'Shared Mouse Tracker'
+description: 'A real-time interactive application for tracking mouse movements across multiple users'
+---
+
+import { Callout } from 'nextra/components'
+
+# Shared Mouse Tracker
+
+A real-time interactive application built using Next.js and Geobase that tracks mouse movements of multiple users and displays them on a shared canvas. The app features responsive design, real-time updates, and user-specific markers for enhanced clarity.
+
+## Features
+
+- **Real-Time Mouse Tracking**: Track and visualize user mouse movements on a shared canvas
+- **Unique User Identification**: Session-specific user IDs generated using uuid
+- **Live Updates**: Real-time data synchronization using Geobase
+- **Responsive Design**: Mobile-friendly UI built with Tailwind CSS
+- **Interactive Canvas**: Color-coded markers for different users (blue: current user, red: others)
+
+## Tech Stack
+
+- React
+- Next.js
+- Geobase
+- Tailwind CSS
+- uuid
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js (v14 or higher)
+- npm or yarn
+- Geobase account
+
+### Installation
+
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/your-username/shared-mouse-tracker.git
+cd shared-mouse-tracker
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Configure environment variables:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create a `.env.local` file in the project root:
+```env
+NEXT_PUBLIC_Geobase_URL=<your-Geobase-url>
+NEXT_PUBLIC_Geobase_ANON_KEY=<your-Geobase-anon-key>
+```
 
-## Learn More
+4. Start the development server:
+```bash
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+5. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+<Callout type="info">
+  To test multi-user functionality, open the app in multiple browser windows or devices.
+</Callout>
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Core Components
 
-## Deploy on Vercel
+### Canvas Component
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The main component responsible for displaying and tracking mouse movements:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```tsx
+useEffect(() => {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  mouseMovements.forEach(({ x, y, user_id }) => {
+    ctx.fillStyle = user_id === userId ? 'blue' : 'red';
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  setStatus('Idle');
+}, [mouseMovements, userId]);
+```
+
+### Real-Time Subscription
+
+Implementation of Geobase's real-time subscription for mouse movements:
+
+```tsx
+useEffect(() => {
+  const subscription = Geobase
+    .channel('public:mouse_movements')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'mouse_movements' },
+      (payload: { new: MouseMovement }) => {
+        const newMovement = payload.new;
+        setMouseMovements((prev) => [...prev, newMovement]);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    Geobase.removeChannel(subscription);
+  };
+}, []);
+```
+
+## Database Setup
+
+Create the required table in your Geobase instance:
+
+```sql
+CREATE TABLE mouse_movements (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
+  x INT NOT NULL,
+  y INT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+## UI Components
+
+### Badge
+Displays user information and tracking status:
+- Shows current user ID
+- Indicates real-time tracking status (Idle/Tracking)
+
+### Button
+Provides canvas management functionality:
+- Clear canvas option
+- Styled with Tailwind CSS for consistent design
+
+### Card
+Main container component:
+- Wraps the UI elements
+- Ensures consistent spacing and layout
+- Responsive design for all screen sizes
+
+## Responsive Design
+
+The application uses Tailwind CSS for a mobile-first approach:
+
+- **Flexible Canvas**: Automatically scales to fit different screen sizes
+- **Touch Support**: Works on mobile devices and tablets
+- **Responsive Layout**: Adapts UI elements for optimal viewing on all devices
+- **Interactive Elements**: Proper spacing for touch targets
+- **Visual Feedback**: Hover and active states for better UX
+
