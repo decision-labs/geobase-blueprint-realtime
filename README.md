@@ -35,8 +35,8 @@ A real-time interactive application built using Next.js and Geobase that tracks 
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/shared-mouse-tracker.git
-cd shared-mouse-tracker
+git clone https://github.com/decision-labs/geobase-blueprint-realtime.git
+cd geobase-blueprint-realtime
 ```
 
 2. Install dependencies:
