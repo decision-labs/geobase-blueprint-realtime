@@ -70,3 +70,8 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+.user-mouse-marker {
+  pointer-events: none;
+  transition: transform 0.1s ease;
+}
