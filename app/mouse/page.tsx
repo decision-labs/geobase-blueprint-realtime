@@ -10,211 +10,219 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { throttle } from 'lodash';
 
-type MouseMovement = {
+type Movement = {
+  id?: string;
   user_id: string;
   x: number;
   y: number;
-  created_at: string;
+  created_at?: string;
+};
+
+type Pin = {
+  id?: string;
+  user_id: string;
+  x: number;
+  y: number;
+  created_at?: string;
 };
 
 export default function MouseTracker() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const [mouseMovements, setMouseMovements] = useState<MouseMovement[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>('Idle'); 
-  const mouseMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const [userPositions, setUserPositions] = useState<Record<string, maplibregl.LngLat>>({});
+  const markersRef = useRef<Record<string, maplibregl.Marker>>({});
+  const pinsRef = useRef<maplibregl.Marker[]>([]);
+  const [userId, setUserId] = useState<string>('');
+  const [status, setStatus] = useState<string>('Idle');
+  
+
+  useEffect(() => {
+    setUserId(uuidv4());
+  }, []);
+
+  const createMarkerElement = (isOwn: boolean, isPin: boolean = false): HTMLDivElement => {
+    const el = document.createElement('div');
+    el.className = `${isPin ? 'pin' : 'marker'}-${isOwn ? 'own' : 'other'}`;
+    el.style.width = isPin ? '10px' : '15px';
+    el.style.height = isPin ? '10px' : '15px';
+    el.style.borderRadius = '50%';
+    el.style.backgroundColor = isOwn ? 'rgba(0, 0, 255, 0.7)' : 'rgba(255, 0, 0, 0.7)';
+    el.style.border = '2px solid white';
+    el.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
+    return el;
+  };
 
   const throttledBroadcast = useCallback(
     throttle((lngLat: maplibregl.LngLat) => {
-      console.log('Broadcasting position:', lngLat);
-      console.log('Current userId:', userId);
       if (!userId) return;
-      
-      // Insert the mouse position into the database
+
       Geobase.from('mouse_movements')
-        .insert([{ 
-          user_id: userId, 
-          x: lngLat.lng, 
-          y: lngLat.lat 
-        }])
-        .then(response => {
-          console.log('Insert response:', response);
-        })
-        .catch(error => {
-          console.error('Insert error:', error);
-        });
-    }, 50),
+        .insert([{ user_id: userId, x: lngLat.lng, y: lngLat.lat }])
+        .then(
+          () => setStatus('Moving'),
+          () => setStatus('Failed to update position')
+        );
+    }, 100),
     [userId]
   );
 
-  useEffect(() => {
-    const newUserId = uuidv4();
-    setUserId(newUserId);
-    console.log('Set userId:', newUserId);
-  }, []);
+  const dropPin = async (lngLat: maplibregl.LngLat) => {
+    if (!userId || !mapRef.current) return;
 
-  const logMouseMovement = async (lngLat: maplibregl.LngLat) => {
-    console.log('Current userId:', userId);
-    if (!userId) {
-      console.log('No userId available, skipping movement logging');
-      return;
-    }
+    setStatus('Dropping pin...');
     
-    setStatus('Tracking...');
     try {
-      await Geobase.from('mouse_movements').insert([{ 
-        user_id: userId, 
-        x: lngLat.lng, 
-        y: lngLat.lat 
-      }]);
-      console.log('Movement logged successfully');
+      const element = createMarkerElement(true, true);
+      const marker = new maplibregl.Marker(element)
+        .setLngLat(lngLat)
+        .addTo(mapRef.current);
+
+      pinsRef.current.push(marker);
+
+      await Geobase.from('pins').insert([{ user_id: userId, x: lngLat.lng, y: lngLat.lat }]);
+
+      setStatus('Pin dropped');
     } catch (error) {
-      console.error('Error logging movement:', error);
-      setStatus('Error logging movement');
+      console.error('Error dropping pin:', error);
+      setStatus('Failed to drop pin');
     }
   };
 
-  // Listen for database changes
   useEffect(() => {
-    console.log('Setting up subscription with userId:', userId);
+    if (typeof window !== 'undefined' && mapContainerRef.current) {
+      mapRef.current = new maplibregl.Map({
+        container: mapContainerRef.current,
+        style: 'https://demotiles.maplibre.org/style.json',
+        center: [0, 0],
+        zoom: 2,
+      });
+  
+      const handleMouseMove = (e: maplibregl.MapMouseEvent) => {
+        if (!markersRef.current[userId] && mapRef.current) {
+          const ownElement = createMarkerElement(true);
+          markersRef.current[userId] = new maplibregl.Marker(ownElement)
+            .setLngLat(e.lngLat)
+            .addTo(mapRef.current);
+        } else {
+          markersRef.current[userId]?.setLngLat(e.lngLat);
+        }
+  
+        throttledBroadcast(e.lngLat);
+      };
+  
+      const handleMapClick = (e: maplibregl.MapMouseEvent) => {
+        dropPin(e.lngLat);
+      };
+  
+      mapRef.current.on('mousemove', handleMouseMove);
+      mapRef.current.on('click', handleMapClick);
+  
+      Geobase.from('pins')
+        .select('*')
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Error fetching pins:', error);
+            return;
+          }
+  
+          if (data && mapRef.current) {
+            data.forEach((pin: Pin) => {
+              const lngLat = new maplibregl.LngLat(pin.x, pin.y);
+              const element = createMarkerElement(pin.user_id === userId, true);
+              if (mapRef.current) {
+                const marker = new maplibregl.Marker(element)
+                  .setLngLat(lngLat)
+                  .addTo(mapRef.current);
 
-    const subscription = Geobase
+                pinsRef.current.push(marker);
+              }
+            });
+          }
+        });
+  
+      return () => {
+        mapRef.current?.off('mousemove', handleMouseMove);
+        mapRef.current?.off('click', handleMapClick);
+        Object.values(markersRef.current).forEach(marker => marker.remove());
+        pinsRef.current.forEach(marker => marker.remove());
+        mapRef.current?.remove();
+      };
+    }
+  }, [throttledBroadcast, userId]);
+  
+
+  useEffect(() => {
+    const movementSubscription = Geobase
       .channel('public:mouse_movements')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'mouse_movements' },
-        (payload: { new: MouseMovement }) => {
-          console.log('New movement received:', payload.new);
-          if (payload.new.user_id !== userId) {
-            setUserPositions(prev => ({
-              ...prev,
-              [payload.new.user_id]: new maplibregl.LngLat(payload.new.x, payload.new.y)
-            }));
+        (payload: { new: Movement }) => {
+          const { user_id, x, y } = payload.new;
+          if (!mapRef.current || user_id === userId) return;
+
+          const lngLat = new maplibregl.LngLat(x, y);
+
+          if (!markersRef.current[user_id]) {
+            const element = createMarkerElement(false);
+            markersRef.current[user_id] = new maplibregl.Marker(element)
+              .setLngLat(lngLat)
+              .addTo(mapRef.current);
+          } else {
+            markersRef.current[user_id]?.setLngLat(lngLat);
           }
         }
       )
-      .subscribe((status) => {
-        console.log('Subscription status:', status);
-      });
+      .subscribe();
 
-    console.log('Subscribed to channel:', subscription);
+    const pinsSubscription = Geobase
+      .channel('public:pins')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'pins' },
+        (payload: { new: Pin }) => {
+          const { user_id, x, y } = payload.new;
+          if (!mapRef.current || user_id === userId) return;
+
+          const lngLat = new maplibregl.LngLat(x, y);
+          const element = createMarkerElement(false, true);
+          const marker = new maplibregl.Marker(element)
+            .setLngLat(lngLat)
+            .addTo(mapRef.current);
+
+          pinsRef.current.push(marker);
+        }
+      )
+      .subscribe();
 
     return () => {
-      console.log('Cleaning up subscription');
-      Geobase.removeChannel(subscription);
+      Geobase.removeChannel(movementSubscription);
+      Geobase.removeChannel(pinsSubscription);
     };
   }, [userId]);
 
   useEffect(() => {
-    if (!mapContainerRef.current || !userId) return;
+    const cleanupInterval = setInterval(() => {
+      Object.entries(markersRef.current).forEach(([id, marker]) => {
+        if (id !== userId) {
+          marker.remove();
+          delete markersRef.current[id];
+        }
+      });
+    }, 5000);
 
-    console.log('Initializing map with userId:', userId);
-    
-    mapRef.current = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: 'https://demotiles.maplibre.org/style.json',
-      center: [0, 0],
-      zoom: 2
-    });
+    return () => clearInterval(cleanupInterval);
+  }, [userId]);
 
-    const el = document.createElement('div');
-    el.className = 'mouse-tracker';
-    el.style.width = '15px';
-    el.style.height = '15px';
-    el.style.borderRadius = '50%';
-    el.style.backgroundColor = 'rgba(0, 0, 255, 0.5)';
-    el.style.border = '2px solid white';
-    el.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
-
-    mouseMarkerRef.current = new maplibregl.Marker(el);
-
-    const handleMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (mouseMarkerRef.current) {
-        mouseMarkerRef.current.setLngLat(e.lngLat).addTo(mapRef.current!);
+  const clearMarkers = useCallback(() => {
+    pinsRef.current.forEach(marker => marker.remove());
+    pinsRef.current = [];
+    Object.entries(markersRef.current).forEach(([id, marker]) => {
+      if (id !== userId) {
+        marker.remove();
+        delete markersRef.current[id];
       }
-      throttledBroadcast(e.lngLat);
-    };
-
-    mapRef.current.on('mousemove', handleMouseMove);
-    mapRef.current.on('click', handleMapClick);
-
-    return () => {
-      mapRef.current?.off('mousemove', handleMouseMove);
-      mapRef.current?.off('click', handleMapClick);
-      mouseMarkerRef.current?.remove();
-      mapRef.current?.remove();
-    };
-  }, [userId, throttledBroadcast]);
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-
-    console.log('Current mouse movements:', mouseMovements);
-
-    // Remove existing markers
-    const markers = document.getElementsByClassName('mouse-marker');
-    while (markers[0]) {
-      markers[0].remove();
-    }
-
-    // Add new markers
-    mouseMovements.forEach(({ x, y, user_id }) => {
-      console.log('Creating marker:', x, y, user_id);
-      const el = document.createElement('div');
-      el.className = 'mouse-marker';
-      el.style.width = '10px';
-      el.style.height = '10px';
-      el.style.borderRadius = '50%';
-      el.style.backgroundColor = user_id === userId ? 'blue' : 'red';
-
-      new maplibregl.Marker(el)
-        .setLngLat([x, y])
-        .addTo(mapRef.current!);
     });
-
-    setStatus('Idle');
-  }, [mouseMovements, userId]);
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-
-    // Clear old markers
-    const markers = document.getElementsByClassName('user-mouse-marker');
-    while (markers[0]) {
-      markers[0].remove();
-    }
-
-    // Create markers for each user position
-    Object.entries(userPositions).forEach(([user_id, lngLat]) => {
-      const el = document.createElement('div');
-      el.className = 'user-mouse-marker';
-      el.style.width = '15px';
-      el.style.height = '15px';
-      el.style.borderRadius = '50%';
-      el.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
-      el.style.border = '2px solid white';
-      el.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
-
-      new maplibregl.Marker(el)
-        .setLngLat(lngLat)
-        .addTo(mapRef.current!);
-    });
-  }, [userPositions]);
-
-  const handleMapClick = (e: maplibregl.MapMouseEvent) => {
-    console.log('Map clicked:', e.lngLat);
-    logMouseMovement(e.lngLat);
-  };
-
-  const clearMarkers = () => {
-    setMouseMovements([]);
-    const markers = document.getElementsByClassName('mouse-marker');
-    while (markers[0]) {
-      markers[0].remove();
-    }
-  };
+  }, [userId]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
@@ -227,7 +235,7 @@ export default function MouseTracker() {
         <CardContent className="flex flex-col items-center">
           <div className="flex items-center justify-between w-full mb-4">
             <Badge variant="outline" className="text-sm">
-              Your User ID: {userId ?? 'Loading...'}
+              Your ID: {userId}
             </Badge>
             <Badge variant="secondary" className="text-sm">
               Status: {status}
