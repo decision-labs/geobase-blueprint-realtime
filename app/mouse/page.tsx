@@ -383,47 +383,54 @@ export default function MouseTracker() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
-      <Card className="w-full max-w-4xl shadow-lg">
-        <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-semibold text-gray-800">
-            Shared Map Tracker
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center">
-          <div className="flex items-center justify-between w-full mb-4">
-            <Badge variant="outline" className="text-sm">
-              Your ID: {userId}
-            </Badge>
-            <div className="flex items-center gap-2">
+    <div className="h-screen w-screen relative">
+      <div
+        ref={mapContainerRef}
+        className="w-full h-full"
+      />
+
+      <div className="absolute top-4 left-4 right-4 flex justify-between items-start gap-4 z-10">
+        <Card className="bg-white/90 backdrop-blur-sm">
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-2">
+              <Badge variant="outline" className="text-sm">
+                Your ID: {userId}
+              </Badge>
               <Badge variant="secondary" className="text-sm">
                 Online Users: {Object.keys(presenceState).length}
               </Badge>
+              <Badge variant="secondary" className="text-sm">
+                Status: {status}
+              </Badge>
             </div>
-            <Badge variant="secondary" className="text-sm">
-              Status: {status}
-            </Badge>
-          </div>
-          <div className="relative mb-4">
-            <div
-              ref={mapContainerRef}
-              className="w-[800px] h-[600px] rounded-lg shadow-md"
-            />
-          </div>
-          <div className="w-full flex justify-between items-center">
-            <Button variant="outline" className="mt-2" onClick={clearMarkers}>
-              Clear Markers
-            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white/90 backdrop-blur-sm">
+          <CardContent className="p-4">
             <div className="flex flex-col gap-2">
               {renderActiveUsers()}
             </div>
-          </div>
-          <div className="flex justify-between w-full mt-4 text-sm text-gray-500">
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center z-10">
+        <Button 
+          variant="outline" 
+          className="bg-white/90 backdrop-blur-sm" 
+          onClick={clearMarkers}
+        >
+          Clear Markers
+        </Button>
+        
+        <Card className="bg-white/90 backdrop-blur-sm">
+          <CardContent className="p-4 flex gap-4">
             <span className="text-blue-500 font-medium">Blue: You</span>
             <span className="font-medium">Unique Colors: Other Users</span>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
