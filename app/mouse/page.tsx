@@ -24,6 +24,17 @@ type Pin = {
   created_at?: string;
 };
 
+type PresenceState = {
+  user: string;
+  online_at: string;
+};
+
+type PresenceEventPayload = {
+  key: string;
+  newPresences: PresenceState[];
+  leftPresences: PresenceState[];
+};
+
 export default function MouseTracker() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -32,21 +43,47 @@ export default function MouseTracker() {
   const channelRef = useRef<any>(null);
   const [userId, setUserId] = useState<string>('');
   const [status, setStatus] = useState<string>('Idle');
+  const [presenceState, setPresenceState] = useState<Record<string, PresenceState[]>>({});
 
   useEffect(() => {
     setUserId(uuidv4());
   }, []);
 
-  const createMarkerElement = (isOwn: boolean, isPin: boolean = false): HTMLDivElement => {
-    const el = document.createElement('div');
-    el.className = `${isPin ? 'pin' : 'marker'}-${isOwn ? 'own' : 'other'}`;
-    el.style.width = isPin ? '10px' : '15px';
-    el.style.height = isPin ? '10px' : '15px';
-    el.style.borderRadius = '50%';
-    el.style.backgroundColor = isOwn ? 'rgba(0, 0, 255, 0.7)' : 'rgba(255, 0, 0, 0.7)';
-    el.style.border = '2px solid white';
-    el.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
-    return el;
+  const createMarkerElement = (isOwn: boolean, isPin: boolean = false, userId: string): HTMLDivElement => {
+    const container = document.createElement('div');
+    container.className = 'marker-container';
+    container.style.position = 'relative';
+    
+    const dot = document.createElement('div');
+    dot.className = `${isPin ? 'pin' : 'marker'}-${isOwn ? 'own' : 'other'}`;
+    dot.style.width = isPin ? '10px' : '15px';
+    dot.style.height = isPin ? '10px' : '15px';
+    dot.style.borderRadius = '50%';
+    dot.style.backgroundColor = isOwn ? 'rgba(0, 0, 255, 0.7)' : 'rgba(255, 0, 0, 0.7)';
+    dot.style.border = '2px solid white';
+    dot.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
+    
+    const label = document.createElement('div');
+    label.className = 'marker-label';
+    label.style.position = 'absolute';
+    label.style.top = '-25px';
+    label.style.left = '50%';
+    label.style.transform = 'translateX(-50%)';
+    label.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    label.style.color = 'white';
+    label.style.padding = '2px 6px';
+    label.style.borderRadius = '4px';
+    label.style.fontSize = '12px';
+    label.style.whiteSpace = 'nowrap';
+    label.style.pointerEvents = 'none';
+    label.textContent = isOwn ? 'You' : `User ${userId.slice(0, 6)}`;
+
+    container.appendChild(dot);
+    if (!isPin) {  // Only show label for cursor markers, not pins
+      container.appendChild(label);
+    }
+    
+    return container;
   };
 
   const throttledBroadcast = useCallback(
@@ -70,7 +107,7 @@ export default function MouseTracker() {
     setStatus('Dropping pin...');
     
     try {
-      const element = createMarkerElement(true, true);
+      const element = createMarkerElement(true, true, userId);
       const marker = new maplibregl.Marker(element)
         .setLngLat(lngLat)
         .addTo(mapRef.current);
@@ -86,8 +123,23 @@ export default function MouseTracker() {
     }
   };
 
+  const handleMouseMove = useCallback((e: maplibregl.MapMouseEvent) => {
+    if (!mapRef.current || !userId) return;
+
+    if (!markersRef.current[userId]) {
+      const ownElement = createMarkerElement(true, false, userId);
+      markersRef.current[userId] = new maplibregl.Marker(ownElement)
+        .setLngLat(e.lngLat)
+        .addTo(mapRef.current);
+    } else {
+      markersRef.current[userId]?.setLngLat(e.lngLat);
+    }
+
+    throttledBroadcast(e.lngLat);
+  }, [userId, throttledBroadcast]);
+
   useEffect(() => {
-    if (typeof window !== 'undefined' && mapContainerRef.current) {
+    if (typeof window !== 'undefined' && mapContainerRef.current && userId) {
       mapRef.current = new maplibregl.Map({
         container: mapContainerRef.current,
         style: 'https://demotiles.maplibre.org/style.json',
@@ -95,9 +147,12 @@ export default function MouseTracker() {
         zoom: 2,
       });
 
-      channelRef.current = Geobase.channel('mouse-tracking', {
+      channelRef.current = Geobase.channel('room_01', {
         config: {
           broadcast: { self: false },
+          presence: {
+            key: userId,
+          },
         },
       });
 
@@ -109,7 +164,7 @@ export default function MouseTracker() {
           const lngLat = new maplibregl.LngLat(x, y);
 
           if (!markersRef.current[user_id]) {
-            const element = createMarkerElement(false);
+            const element = createMarkerElement(false, false, user_id);
             markersRef.current[user_id] = new maplibregl.Marker(element)
               .setLngLat(lngLat)
               .addTo(mapRef.current);
@@ -117,20 +172,34 @@ export default function MouseTracker() {
             markersRef.current[user_id]?.setLngLat(lngLat);
           }
         })
-        .subscribe();
-  
-      const handleMouseMove = (e: maplibregl.MapMouseEvent) => {
-        if (!markersRef.current[userId] && mapRef.current) {
-          const ownElement = createMarkerElement(true);
-          markersRef.current[userId] = new maplibregl.Marker(ownElement)
-            .setLngLat(e.lngLat)
-            .addTo(mapRef.current);
-        } else {
-          markersRef.current[userId]?.setLngLat(e.lngLat);
-        }
-  
-        throttledBroadcast(e.lngLat);
-      };
+        .on('presence', { event: 'sync' }, () => {
+          const state = channelRef.current.presenceState() as Record<string, PresenceState[]>;
+          console.log('sync', state);
+          setPresenceState(state);
+        })
+        .on('presence', { event: 'join' }, ({ key, newPresences }: PresenceEventPayload) => {
+          console.log('join', key, newPresences);
+          setPresenceState(current => ({
+            ...current,
+            [key]: newPresences
+          }));
+        })
+        .on('presence', { event: 'leave' }, ({ key, leftPresences }: PresenceEventPayload) => {
+          console.log('leave', key, leftPresences);
+          setPresenceState(current => {
+            const newState = { ...current };
+            delete newState[key];
+            return newState;
+          });
+        })
+        .subscribe(async (status: string) => {
+          if (status !== 'SUBSCRIBED') return;
+          
+          await channelRef.current.track({
+            user: userId,
+            online_at: new Date().toISOString(),
+          });
+        });
   
       const handleMapClick = (e: maplibregl.MapMouseEvent) => {
         dropPin(e.lngLat);
@@ -150,7 +219,7 @@ export default function MouseTracker() {
           if (data && mapRef.current) {
             data.forEach((pin: Pin) => {
               const lngLat = new maplibregl.LngLat(pin.x, pin.y);
-              const element = createMarkerElement(pin.user_id === userId, true);
+              const element = createMarkerElement(pin.user_id === userId, true, userId);
               if (mapRef.current) {
                 const marker = new maplibregl.Marker(element)
                   .setLngLat(lngLat)
@@ -163,15 +232,21 @@ export default function MouseTracker() {
         });
   
       return () => {
-        mapRef.current?.off('mousemove', handleMouseMove);
-        mapRef.current?.off('click', handleMapClick);
-        Object.values(markersRef.current).forEach(marker => marker.remove());
-        pinsRef.current.forEach(marker => marker.remove());
-        Geobase.removeChannel(channelRef.current);
-        mapRef.current?.remove();
+        const cleanup = async () => {
+          if (channelRef.current) {
+            await channelRef.current.untrack();
+            Geobase.removeChannel(channelRef.current);
+          }
+          mapRef.current?.off('mousemove', handleMouseMove);
+          mapRef.current?.off('click', handleMapClick);
+          Object.values(markersRef.current).forEach(marker => marker.remove());
+          pinsRef.current.forEach(marker => marker.remove());
+          mapRef.current?.remove();
+        };
+        cleanup();
       };
     }
-  }, [throttledBroadcast, userId]);
+  }, [throttledBroadcast, userId, handleMouseMove]);
 
   useEffect(() => {
     const pinsSubscription = Geobase
@@ -184,7 +259,7 @@ export default function MouseTracker() {
           if (!mapRef.current || user_id === userId) return;
 
           const lngLat = new maplibregl.LngLat(x, y);
-          const element = createMarkerElement(false, true);
+          const element = createMarkerElement(false, true, userId);
           const marker = new maplibregl.Marker(element)
             .setLngLat(lngLat)
             .addTo(mapRef.current);
@@ -223,6 +298,17 @@ export default function MouseTracker() {
     });
   }, [userId]);
 
+  const renderActiveUsers = () => {
+    return Object.entries(presenceState).map(([key, presences]) => {
+      const presence = presences[0];
+      return (
+        <Badge key={key} variant="outline" className="text-xs">
+          {presence.user === userId ? 'You' : `User ${presence.user}`}
+        </Badge>
+      );
+    });
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
       <Card className="w-full max-w-4xl shadow-lg">
@@ -236,6 +322,11 @@ export default function MouseTracker() {
             <Badge variant="outline" className="text-sm">
               Your ID: {userId}
             </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-sm">
+                Online Users: {Object.keys(presenceState).length}
+              </Badge>
+            </div>
             <Badge variant="secondary" className="text-sm">
               Status: {status}
             </Badge>
@@ -246,9 +337,14 @@ export default function MouseTracker() {
               className="w-[800px] h-[600px] rounded-lg shadow-md"
             />
           </div>
-          <Button variant="outline" className="mt-2" onClick={clearMarkers}>
-            Clear Markers
-          </Button>
+          <div className="w-full flex justify-between items-center">
+            <Button variant="outline" className="mt-2" onClick={clearMarkers}>
+              Clear Markers
+            </Button>
+            <div className="flex flex-col gap-1">
+              {renderActiveUsers()}
+            </div>
+          </div>
           <div className="flex justify-between w-full mt-4 text-sm text-gray-500">
             <span className="text-blue-500 font-medium">Blue: You</span>
             <span className="text-red-500 font-medium">Red: Others</span>
