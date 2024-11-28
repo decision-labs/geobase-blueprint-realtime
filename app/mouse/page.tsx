@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { throttle } from 'lodash';
+import { getUserAvatar } from '@/lib/avatars';
 
 type Movement = {
   user_id: string;
@@ -33,6 +34,11 @@ type PresenceEventPayload = {
   key: string;
   newPresences: PresenceState[];
   leftPresences: PresenceState[];
+};
+
+type UserDisplay = {
+  name: string;
+  avatar: string;
 };
 
 const COLORS = [
@@ -357,10 +363,21 @@ export default function MouseTracker() {
   const renderActiveUsers = () => {
     return Object.entries(presenceState).map(([key, presences]) => {
       const presence = presences[0];
+      const name = presence.user === userId ? 'You' : getOrCreateUserName(presence.user);
+      const avatar = getUserAvatar(presence.user);
+      
       return (
-        <Badge key={key} variant="outline" className="text-xs">
-          {presence.user === userId ? 'You' : `User ${presence.user}`}
-        </Badge>
+        <div key={key} className="flex items-center gap-2 mb-2">
+          <img 
+            src={avatar} 
+            alt={name} 
+            className="w-8 h-8 rounded-full bg-white"
+            loading="lazy"
+          />
+          <Badge variant="outline" className="text-xs">
+            {name}
+          </Badge>
+        </div>
       );
     });
   };
@@ -397,7 +414,7 @@ export default function MouseTracker() {
             <Button variant="outline" className="mt-2" onClick={clearMarkers}>
               Clear Markers
             </Button>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2">
               {renderActiveUsers()}
             </div>
           </div>
