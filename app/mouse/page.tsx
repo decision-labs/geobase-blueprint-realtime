@@ -390,7 +390,7 @@ export default function MouseTracker() {
       />
 
       <div className="absolute top-4 left-4 right-4 flex justify-between items-start gap-4 z-10">
-        <Card className="bg-white/90 backdrop-blur-sm">
+        <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
           <CardContent className="p-4">
             <div className="flex flex-col gap-2">
               <Badge variant="outline" className="text-sm">
@@ -406,7 +406,7 @@ export default function MouseTracker() {
           </CardContent>
         </Card>
 
-        <Card className="bg-white/90 backdrop-blur-sm">
+        <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
           <CardContent className="p-4">
             <div className="flex flex-col gap-2">
               {renderActiveUsers()}
@@ -415,21 +415,36 @@ export default function MouseTracker() {
         </Card>
       </div>
 
-      <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center z-10">
-        <Button 
-          variant="outline" 
-          className="bg-white/90 backdrop-blur-sm" 
-          onClick={clearMarkers}
-        >
-          Clear Markers
-        </Button>
-        
-        <Card className="bg-white/90 backdrop-blur-sm">
-          <CardContent className="p-4 flex gap-4">
-            <span className="text-blue-500 font-medium">Blue: You</span>
-            <span className="font-medium">Unique Colors: Other Users</span>
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-6">
+        <Card className="bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-2 border-gray-100/50 min-w-[400px]">
+          <CardHeader>
+            <CardTitle className="text-center text-gray-700 text-lg">Map Legend</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 flex items-center justify-center gap-12">
+            <div className="flex items-center gap-4">
+              <div className="w-5 h-5 rounded-full bg-blue-600 border-2 border-white shadow-md 
+                animate-pulse"></div>
+              <span className="text-base font-semibold text-gray-700">Your Cursor</span>
+            </div>
+            <div className="h-8 w-px bg-gray-200"></div>
+            <div className="flex items-center gap-4">
+              <div className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 
+                border-2 border-white shadow-md"></div>
+              <span className="text-base font-semibold text-gray-700">Other Users</span>
+            </div>
           </CardContent>
         </Card>
+
+        <Button 
+          variant="outline" 
+          className="bg-white/95 backdrop-blur-sm shadow-xl rounded-xl px-10 py-6 
+          border-2 border-gray-100/50 hover:bg-white hover:scale-105 transition-all duration-300
+          text-gray-700 hover:text-gray-900 font-semibold text-lg
+          hover:border-red-200 hover:shadow-red-100/50 group"
+          onClick={clearMarkers}
+        >
+          <span className="group-hover:text-red-600 transition-colors">Clear All Markers</span>
+        </Button>
       </div>
     </div>
   );
