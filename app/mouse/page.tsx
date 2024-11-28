@@ -11,11 +11,9 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { throttle } from 'lodash';
 
 type Movement = {
-  id?: string;
   user_id: string;
   x: number;
   y: number;
-  created_at?: string;
 };
 
 type Pin = {
@@ -31,9 +29,9 @@ export default function MouseTracker() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Record<string, maplibregl.Marker>>({});
   const pinsRef = useRef<maplibregl.Marker[]>([]);
+  const channelRef = useRef<any>(null);
   const [userId, setUserId] = useState<string>('');
   const [status, setStatus] = useState<string>('Idle');
-  
 
   useEffect(() => {
     setUserId(uuidv4());
@@ -53,14 +51,15 @@ export default function MouseTracker() {
 
   const throttledBroadcast = useCallback(
     throttle((lngLat: maplibregl.LngLat) => {
-      if (!userId) return;
+      if (!userId || !channelRef.current) return;
 
-      Geobase.from('mouse_movements')
-        .insert([{ user_id: userId, x: lngLat.lng, y: lngLat.lat }])
-        .then(
-          () => setStatus('Moving'),
-          () => setStatus('Failed to update position')
-        );
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'mouse-move',
+        payload: { user_id: userId, x: lngLat.lng, y: lngLat.lat }
+      });
+      
+      setStatus('Moving');
     }, 100),
     [userId]
   );
@@ -95,6 +94,30 @@ export default function MouseTracker() {
         center: [0, 0],
         zoom: 2,
       });
+
+      channelRef.current = Geobase.channel('mouse-tracking', {
+        config: {
+          broadcast: { self: false },
+        },
+      });
+
+      channelRef.current
+        .on('broadcast', { event: 'mouse-move' }, (payload: { payload: Movement }) => {
+          const { user_id, x, y } = payload.payload;
+          if (!mapRef.current || user_id === userId) return;
+
+          const lngLat = new maplibregl.LngLat(x, y);
+
+          if (!markersRef.current[user_id]) {
+            const element = createMarkerElement(false);
+            markersRef.current[user_id] = new maplibregl.Marker(element)
+              .setLngLat(lngLat)
+              .addTo(mapRef.current);
+          } else {
+            markersRef.current[user_id]?.setLngLat(lngLat);
+          }
+        })
+        .subscribe();
   
       const handleMouseMove = (e: maplibregl.MapMouseEvent) => {
         if (!markersRef.current[userId] && mapRef.current) {
@@ -144,36 +167,13 @@ export default function MouseTracker() {
         mapRef.current?.off('click', handleMapClick);
         Object.values(markersRef.current).forEach(marker => marker.remove());
         pinsRef.current.forEach(marker => marker.remove());
+        Geobase.removeChannel(channelRef.current);
         mapRef.current?.remove();
       };
     }
   }, [throttledBroadcast, userId]);
-  
 
   useEffect(() => {
-    const movementSubscription = Geobase
-      .channel('public:mouse_movements')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'mouse_movements' },
-        (payload: { new: Movement }) => {
-          const { user_id, x, y } = payload.new;
-          if (!mapRef.current || user_id === userId) return;
-
-          const lngLat = new maplibregl.LngLat(x, y);
-
-          if (!markersRef.current[user_id]) {
-            const element = createMarkerElement(false);
-            markersRef.current[user_id] = new maplibregl.Marker(element)
-              .setLngLat(lngLat)
-              .addTo(mapRef.current);
-          } else {
-            markersRef.current[user_id]?.setLngLat(lngLat);
-          }
-        }
-      )
-      .subscribe();
-
     const pinsSubscription = Geobase
       .channel('public:pins')
       .on(
@@ -195,7 +195,6 @@ export default function MouseTracker() {
       .subscribe();
 
     return () => {
-      Geobase.removeChannel(movementSubscription);
       Geobase.removeChannel(pinsSubscription);
     };
   }, [userId]);
