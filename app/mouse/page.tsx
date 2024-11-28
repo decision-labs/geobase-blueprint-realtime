@@ -48,6 +48,16 @@ const COLORS = [
   '#27AE60', 
 ];
 
+const ADJECTIVES = [
+  'Swift', 'Brave', 'Clever', 'Mighty', 'Noble', 
+  'Wise', 'Lucky', 'Bright', 'Wild', 'Calm'
+];
+
+const NOUNS = [
+  'Fox', 'Eagle', 'Wolf', 'Bear', 'Lion', 
+  'Tiger', 'Hawk', 'Deer', 'Owl', 'Dolphin'
+];
+
 export default function MouseTracker() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -58,6 +68,7 @@ export default function MouseTracker() {
   const [status, setStatus] = useState<string>('Idle');
   const [presenceState, setPresenceState] = useState<Record<string, PresenceState[]>>({});
   const colorMapRef = useRef<Record<string, string>>({});
+  const nameMapRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     setUserId(uuidv4());
@@ -77,6 +88,18 @@ export default function MouseTracker() {
     
     colorMapRef.current[uid] = newColor;
     return newColor;
+  }, []);
+
+  const getOrCreateUserName = useCallback((uid: string): string => {
+    if (nameMapRef.current[uid]) {
+      return nameMapRef.current[uid];
+    }
+
+    const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+    const name = `${adjective} ${noun}`;
+    nameMapRef.current[uid] = name;
+    return name;
   }, []);
 
   const createMarkerElement = useCallback((isOwn: boolean, isPin: boolean = false, uid: string): HTMLDivElement => {
@@ -110,12 +133,12 @@ export default function MouseTracker() {
         font-size: 12px;
         white-space: nowrap;
       `;
-      label.textContent = isOwn ? 'You' : `User ${uid.slice(0, 6)}`;
+      label.textContent = isOwn ? 'You' : getOrCreateUserName(uid);
       container.appendChild(label);
     }
     
     return container;
-  }, [getOrCreateUserColor]);
+  }, [getOrCreateUserColor, getOrCreateUserName]);
 
   const throttledBroadcast = useCallback(
     throttle((lngLat: maplibregl.LngLat) => {
@@ -274,6 +297,7 @@ export default function MouseTracker() {
           pinsRef.current.forEach(marker => marker.remove());
           mapRef.current?.remove();
           colorMapRef.current = {};
+          nameMapRef.current = {};
         };
         cleanup();
       };
