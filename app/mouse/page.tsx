@@ -198,6 +198,7 @@ export default function MouseTracker() {
     throttledBroadcast(e.lngLat);
   }, [userId, throttledBroadcast]);
 
+  // Initialize map and channel
   useEffect(() => {
     if (typeof window !== 'undefined' && mapContainerRef.current && userId) {
       mapRef.current = new maplibregl.Map({
@@ -310,6 +311,7 @@ export default function MouseTracker() {
     }
   }, [throttledBroadcast, userId, handleMouseMove]);
 
+  // Subscribe to pins
   useEffect(() => {
     const pinsSubscription = Geobase
       .channel('public:pins')
@@ -336,6 +338,7 @@ export default function MouseTracker() {
     };
   }, [userId]);
 
+  // Cleanup markers
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       Object.entries(markersRef.current).forEach(([id, marker]) => {
@@ -418,21 +421,16 @@ export default function MouseTracker() {
       </div>
 
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-6">
-        <Card className="bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-2 border-gray-100/50 min-w-[400px]">
-          <CardHeader>
-            <CardTitle className="text-center text-gray-700 text-lg">Map Legend</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 flex items-center justify-center gap-12">
-            <div className="flex items-center gap-4">
-              <div className="w-5 h-5 rounded-full bg-blue-600 border-2 border-white shadow-md 
-                animate-pulse"></div>
-              <span className="text-base font-semibold text-gray-700">Your Cursor</span>
+        <Card className="bg-white/95 backdrop-blur-sm shadow-lg w-fit">
+          <CardContent className="p-4 flex items-center gap-8">
+            <div className="flex items-center gap-3">
+              <div className="w-4 h-4 rounded-full bg-blue-600 border-2 border-white shadow-md animate-pulse" />
+              <span className="text-sm text-gray-700">Your Cursor</span>
             </div>
-            <div className="h-8 w-px bg-gray-200"></div>
-            <div className="flex items-center gap-4">
-              <div className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 
-                border-2 border-white shadow-md"></div>
-              <span className="text-base font-semibold text-gray-700">Other Users</span>
+            <div className="h-6 w-px bg-gray-200" />
+            <div className="flex items-center gap-3">
+              <div className="w-4 h-4 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 border-2 border-white shadow-md" />
+              <span className="text-sm text-gray-700">Other Users</span>
             </div>
           </CardContent>
         </Card>
