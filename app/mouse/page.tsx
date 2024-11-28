@@ -51,35 +51,34 @@ export default function MouseTracker() {
 
   const createMarkerElement = (isOwn: boolean, isPin: boolean = false, userId: string): HTMLDivElement => {
     const container = document.createElement('div');
-    container.className = 'marker-container';
-    container.style.position = 'relative';
     
     const dot = document.createElement('div');
-    dot.className = `${isPin ? 'pin' : 'marker'}-${isOwn ? 'own' : 'other'}`;
-    dot.style.width = isPin ? '10px' : '15px';
-    dot.style.height = isPin ? '10px' : '15px';
-    dot.style.borderRadius = '50%';
-    dot.style.backgroundColor = isOwn ? 'rgba(0, 0, 255, 0.7)' : 'rgba(255, 0, 0, 0.7)';
-    dot.style.border = '2px solid white';
-    dot.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
+    dot.style.cssText = `
+      width: ${isPin ? '10px' : '15px'};
+      height: ${isPin ? '10px' : '15px'};
+      border-radius: 50%;
+      background-color: ${isOwn ? 'blue' : 'red'};
+      border: 2px solid white;
+      box-shadow: 0 0 4px rgba(0,0,0,0.4);
+    `;
     
-    const label = document.createElement('div');
-    label.className = 'marker-label';
-    label.style.position = 'absolute';
-    label.style.top = '-25px';
-    label.style.left = '50%';
-    label.style.transform = 'translateX(-50%)';
-    label.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    label.style.color = 'white';
-    label.style.padding = '2px 6px';
-    label.style.borderRadius = '4px';
-    label.style.fontSize = '12px';
-    label.style.whiteSpace = 'nowrap';
-    label.style.pointerEvents = 'none';
-    label.textContent = isOwn ? 'You' : `User ${userId.slice(0, 6)}`;
-
     container.appendChild(dot);
-    if (!isPin) {  // Only show label for cursor markers, not pins
+    
+    if (!isPin) {
+      const label = document.createElement('div');
+      label.style.cssText = `
+        position: absolute;
+        top: -25px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: black;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+      `;
+      label.textContent = isOwn ? 'You' : `User ${userId.slice(0, 6)}`;
       container.appendChild(label);
     }
     
@@ -108,7 +107,7 @@ export default function MouseTracker() {
     
     try {
       const element = createMarkerElement(true, true, userId);
-      const marker = new maplibregl.Marker(element)
+      const marker = new maplibregl.Marker({ element })
         .setLngLat(lngLat)
         .addTo(mapRef.current);
 
@@ -128,7 +127,7 @@ export default function MouseTracker() {
 
     if (!markersRef.current[userId]) {
       const ownElement = createMarkerElement(true, false, userId);
-      markersRef.current[userId] = new maplibregl.Marker(ownElement)
+      markersRef.current[userId] = new maplibregl.Marker({ element: ownElement })
         .setLngLat(e.lngLat)
         .addTo(mapRef.current);
     } else {
@@ -165,7 +164,7 @@ export default function MouseTracker() {
 
           if (!markersRef.current[user_id]) {
             const element = createMarkerElement(false, false, user_id);
-            markersRef.current[user_id] = new maplibregl.Marker(element)
+            markersRef.current[user_id] = new maplibregl.Marker({ element })
               .setLngLat(lngLat)
               .addTo(mapRef.current);
           } else {
@@ -221,7 +220,7 @@ export default function MouseTracker() {
               const lngLat = new maplibregl.LngLat(pin.x, pin.y);
               const element = createMarkerElement(pin.user_id === userId, true, userId);
               if (mapRef.current) {
-                const marker = new maplibregl.Marker(element)
+                const marker = new maplibregl.Marker({ element })
                   .setLngLat(lngLat)
                   .addTo(mapRef.current);
 
@@ -260,7 +259,7 @@ export default function MouseTracker() {
 
           const lngLat = new maplibregl.LngLat(x, y);
           const element = createMarkerElement(false, true, userId);
-          const marker = new maplibregl.Marker(element)
+          const marker = new maplibregl.Marker({ element })
             .setLngLat(lngLat)
             .addTo(mapRef.current);
 
