@@ -363,19 +363,21 @@ export default function MouseTracker() {
   const renderActiveUsers = () => {
     return Object.entries(presenceState).map(([key, presences]) => {
       const presence = presences[0];
-      const name = presence.user === userId ? 'You' : getOrCreateUserName(presence.user);
+      const isCurrentUser = presence.user === userId;
+      const name = getOrCreateUserName(presence.user);
+      const displayName = isCurrentUser ? `You (${name})` : name;
       const avatar = getUserAvatar(presence.user);
       
       return (
         <div key={key} className="flex items-center gap-2 mb-2">
           <img 
             src={avatar} 
-            alt={name} 
+            alt={displayName} 
             className="w-8 h-8 rounded-full bg-white"
             loading="lazy"
           />
           <Badge variant="outline" className="text-xs">
-            {name}
+            {displayName}
           </Badge>
         </div>
       );
