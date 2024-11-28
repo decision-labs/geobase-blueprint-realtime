@@ -35,6 +35,19 @@ type PresenceEventPayload = {
   leftPresences: PresenceState[];
 };
 
+const COLORS = [
+  '#FF6B6B',
+  '#4ECDC4', 
+  '#45B7D1', 
+  '#96CEB4',
+  '#FFEEAD', 
+  '#D4A5A5', 
+  '#9B59B6',
+  '#3498DB', 
+  '#E67E22', 
+  '#27AE60', 
+];
+
 export default function MouseTracker() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -44,20 +57,39 @@ export default function MouseTracker() {
   const [userId, setUserId] = useState<string>('');
   const [status, setStatus] = useState<string>('Idle');
   const [presenceState, setPresenceState] = useState<Record<string, PresenceState[]>>({});
+  const colorMapRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     setUserId(uuidv4());
   }, []);
 
-  const createMarkerElement = (isOwn: boolean, isPin: boolean = false, userId: string): HTMLDivElement => {
+  const getOrCreateUserColor = useCallback((uid: string): string => {
+    if (colorMapRef.current[uid]) {
+      return colorMapRef.current[uid];
+    }
+
+    const usedColors = Object.values(colorMapRef.current);
+    const availableColors = COLORS.filter(color => !usedColors.includes(color));
+    
+    const newColor = availableColors.length > 0
+      ? availableColors[Math.floor(Math.random() * availableColors.length)]
+      : `#${Math.floor(Math.random()*16777215).toString(16)}`;
+    
+    colorMapRef.current[uid] = newColor;
+    return newColor;
+  }, []);
+
+  const createMarkerElement = useCallback((isOwn: boolean, isPin: boolean = false, uid: string): HTMLDivElement => {
     const container = document.createElement('div');
     
     const dot = document.createElement('div');
+    const userColor = isOwn ? '#2563EB' : getOrCreateUserColor(uid);
+    
     dot.style.cssText = `
       width: ${isPin ? '10px' : '15px'};
       height: ${isPin ? '10px' : '15px'};
       border-radius: 50%;
-      background-color: ${isOwn ? 'blue' : 'red'};
+      background-color: ${userColor};
       border: 2px solid white;
       box-shadow: 0 0 4px rgba(0,0,0,0.4);
     `;
@@ -78,12 +110,12 @@ export default function MouseTracker() {
         font-size: 12px;
         white-space: nowrap;
       `;
-      label.textContent = isOwn ? 'You' : `User ${userId.slice(0, 6)}`;
+      label.textContent = isOwn ? 'You' : `User ${uid.slice(0, 6)}`;
       container.appendChild(label);
     }
     
     return container;
-  };
+  }, [getOrCreateUserColor]);
 
   const throttledBroadcast = useCallback(
     throttle((lngLat: maplibregl.LngLat) => {
@@ -218,7 +250,7 @@ export default function MouseTracker() {
           if (data && mapRef.current) {
             data.forEach((pin: Pin) => {
               const lngLat = new maplibregl.LngLat(pin.x, pin.y);
-              const element = createMarkerElement(pin.user_id === userId, true, userId);
+              const element = createMarkerElement(pin.user_id === userId, true, pin.user_id);
               if (mapRef.current) {
                 const marker = new maplibregl.Marker({ element })
                   .setLngLat(lngLat)
@@ -241,6 +273,7 @@ export default function MouseTracker() {
           Object.values(markersRef.current).forEach(marker => marker.remove());
           pinsRef.current.forEach(marker => marker.remove());
           mapRef.current?.remove();
+          colorMapRef.current = {};
         };
         cleanup();
       };
@@ -258,7 +291,7 @@ export default function MouseTracker() {
           if (!mapRef.current || user_id === userId) return;
 
           const lngLat = new maplibregl.LngLat(x, y);
-          const element = createMarkerElement(false, true, userId);
+          const element = createMarkerElement(false, true, user_id);
           const marker = new maplibregl.Marker({ element })
             .setLngLat(lngLat)
             .addTo(mapRef.current);
@@ -346,7 +379,7 @@ export default function MouseTracker() {
           </div>
           <div className="flex justify-between w-full mt-4 text-sm text-gray-500">
             <span className="text-blue-500 font-medium">Blue: You</span>
-            <span className="text-red-500 font-medium">Red: Others</span>
+            <span className="font-medium">Unique Colors: Other Users</span>
           </div>
         </CardContent>
       </Card>
