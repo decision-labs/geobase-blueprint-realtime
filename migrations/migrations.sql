@@ -17,7 +17,8 @@ BEGIN
   NEW.geom := ST_SetSRID(ST_MakePoint(NEW.x, NEW.y), 4326);
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET search_path = extensions, public;
 
 CREATE TRIGGER pins_geom_trigger
 BEFORE INSERT ON public.pins
